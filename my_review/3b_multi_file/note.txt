@@ -1,0 +1,35 @@
+头文件 .h      放“声明”
+源文件 .cpp    放“定义”
+main.cpp       放主程序
+
+.h 负责告诉别人“我有什么函数”
+.cpp 负责真正写这个函数怎么做
+main.cpp 负责使用这些函数
+
+先在 .h 里告诉别人“我有什么函数”
+再在 .cpp 里真正把函数写出来
+最后在 main.cpp 里 include 头文件并使用函数
+编译时把多个 .cpp 一起编译
+
+
+declaration:
+告诉编译器函数存在
+例子：int add(int a, int b);
+
+definition:
+真正写函数内容
+例子：
+int add(int a, int b)
+{
+    return a + b;
+}
+
+main 用多个 cpp 的方法：
+1. 每个功能写成 xxx.h + xxx.cpp
+2. main.cpp include 所有需要的 .h
+3. 编译时把所有相关 .cpp 一起写上
+
+例子：
+g++ main.cpp add.cpp multiply.cpp square.cpp -o main
+
+
