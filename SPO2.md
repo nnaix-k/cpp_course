@@ -1,539 +1,563 @@
-# SpO2 题：如何按做题思路一步一步搭结构
+# SpO2 题：按照老师标准答案的模块思路来理解
 
-这份笔记不是直接给最终答案，而是训练：
+这份笔记解决的问题是：
 
 ```text
-看到题目
--> 先想最后 main 想长什么样
--> 再反推 .h
--> 最后补 .cpp
+为什么老师的标准答案会拆成：
+debug
+ppg
+utils
+report
+main
+```
+
+也就是：
+
+```text
+不只是“把题做出来”
+还要“把题拆得清楚、好维护、好调试”
+```
+
+参考：
+
+- [SpO2 solution 目录](https://github.com/jdtournier/cpp_assignment1_spo2/tree/solution/solution)
+
+---
+
+## 1. 老师这份答案一共分成了什么
+
+老师标准答案里主要有这些文件：
+
+```text
+debug.h
+debug.cpp
+
+ppg.h
+ppg.cpp
+
+utils.h
+utils.cpp
+
+report.h
+report.cpp
+
+spo2.cpp
+```
+
+你可以把它理解成：
+
+```text
+debug   -> 调试和日志
+ppg     -> 读入原始 PPG 数据
+utils   -> 通用小工具函数
+report  -> 生成输出报告
+spo2.cpp -> main，负责串流程
 ```
 
 ---
 
-## 1. 第一步：先把题目翻译成中文步骤
+## 2. 每个模块到底负责什么
 
-看到题目，我先写：
+---
+
+## 3. `spo2.cpp`：主程序入口
+
+这个文件就是：
 
 ```text
-输入：
-- input file
-- output file
-
-输出：
-- report file
-
-步骤：
-1. 读 PPG 文件
-2. 对 red 和 ir 做 3-point moving average
-3. 找 peak / valley
-4. 算 AC / DC
-5. 算 ratio of ratios
-6. 算 SpO2
-7. 分类 status
-8. 写 report
+main.cpp 的角色
 ```
 
-这一步的目的：
+它负责：
 
 ```text
-先把题目从一大段英文，变成一条处理流水线
+1. 检查命令行参数
+2. 设置 debug 模式
+3. 调用 load_PPG()
+4. 调用滤波函数
+5. 调用 write_report()
+6. 用 try/catch 统一处理错误
+```
+
+所以你要把它理解成：
+
+```text
+主控文件
+```
+
+它不负责写所有细节算法，而是：
+
+```text
+把整个程序流程串起来
 ```
 
 ---
 
-## 2. 第二步：先想数据要怎么存
+## 4. `ppg.h / ppg.cpp`：原始数据模块
 
-一份 PPG 数据至少有两条信号：
-
-- red signal
-- ir signal
-
-所以第一反应应该是：
+这个模块负责：
 
 ```text
-这不是一个单独数字，要打包起来
+PPG 是什么
+怎么从文件里把 PPG 数据读进来
 ```
 
-所以想到：
+### `ppg.h`
+
+这里放：
 
 ```cpp
 struct PPG {
-    std::vector<double> red;
-    std::vector<double> ir;
+    std::vector<double> red, ir;
 };
+
+PPG load_PPG(const std::string& filename);
 ```
 
----
-
-## 3. 第三步：再想特征值要怎么存
-
-题目说每条 signal 最后都要得到：
-
-- peak
-- valley
-- AC
-- DC
-
-所以再定义一个：
-
-```cpp
-struct SignalFeatures {
-    double peak;
-    double valley;
-    double ac;
-    double dc;
-};
-```
-
-这样后面会清楚很多。
-
----
-
-## 4. 第四步：先想我希望 main 长什么样
-
-我不先写细节，我先想 main 最后想长成：
-
-```cpp
-PPG ppg = load_ppg(input_file);
-
-PPG filtered = filter_ppg(ppg);
-
-SignalFeatures red_features = extract_features(filtered.red);
-SignalFeatures ir_features = extract_features(filtered.ir);
-
-double rr = compute_ratio_of_ratios(red_features, ir_features);
-double spo2 = compute_spo2(rr);
-std::string status = classify_spo2(spo2);
-
-write_report(output_file, input_file, filtered, red_features, ir_features, rr, spo2, status);
-```
-
-这一步的意义：
+意思：
 
 ```text
-先决定我要“得到什么”
+告诉别人：
+有一个 PPG 类型
+还有一个 load_PPG 函数
+```
+
+### `ppg.cpp`
+
+这里真正写：
+
+```cpp
+PPG load_PPG(const std::string& filename)
+{
+    ...
+}
+```
+
+作用：
+
+```text
+真正实现：
+怎么打开文件
+怎么检查第一行是 RED IR
+怎么一行行读 red 和 ir
+怎么存进 PPG struct
+```
+
+### 为什么要单独分这个模块
+
+因为：
+
+```text
+“读文件”本身就是一个完整的小任务
+```
+
+如果把它塞进 main，会让 main 变长、变乱。
+
+---
+
+## 5. `utils.h / utils.cpp`：通用工具模块
+
+这个模块负责：
+
+```text
+那些不是“只属于 PPG 文件格式”
+也不是“只属于报告输出”
+但程序里反复会用到的小工具
+```
+
+老师答案里这里面主要有：
+
+### 1. `filter_moving_average()`
+
+```cpp
+std::vector<double> filter_moving_average(const std::vector<double>& vec);
+```
+
+作用：
+
+```text
+对任意一串 double 数据做 3-point moving average
+```
+
+为什么放在 `utils`？
+
+因为它既可以给 red 用，也可以给 ir 用。  
+它不是“只属于 red”，也不是“只属于 ir”。
+
+---
+
+### 2. `get_min_max()`
+
+```cpp
+struct MinMax { double min, max; };
+MinMax get_min_max(const std::vector<double>& data);
+```
+
+作用：
+
+```text
+给一串数据，返回最小值和最大值
+```
+
+为什么放在 `utils`？
+
+因为它是一个非常通用的小功能。
+
+以后很多题都可能复用：
+
+- ECG
+- PPG
+- image data
+
+---
+
+## 6. `report.h / report.cpp`：输出报告模块
+
+这个模块负责：
+
+```text
+把最终结果写到文件里
+```
+
+### `report.h`
+
+声明：
+
+```cpp
+void write_report(...);
+```
+
+### `report.cpp`
+
+实现：
+
+```text
+1. 打开输出文件
+2. 算 red 的 peak / valley / AC / DC
+3. 算 ir 的 peak / valley / AC / DC
+4. 算 RR
+5. 算 SpO2
+6. 分类 status
+7. 按要求格式写进 report
+```
+
+### 为什么要单独拆出来
+
+因为：
+
+```text
+“输出报告”本身也是一个独立任务
+```
+
+如果把这些格式化输出都塞进 main，main 会很长。
+
+---
+
+## 7. `debug.h / debug.cpp`：调试模块
+
+这个是你刚刚特别提到的。
+
+老师这里拆一个 `debug` 模块，不是因为题目硬性要求，而是因为：
+
+```text
+它能让程序更容易调试、更专业，也更有设计感
 ```
 
 ---
 
-## 5. 第五步：根据 main 反推 .h
+## 8. `debug` 模块到底在做什么
 
-现在我不急着写函数内容。
+### 1. 开关 verbose mode
 
-我先把 `ppg.h` 里的内容列出来：
+老师的 `debug.h` 里有：
+
+```cpp
+namespace debug {
+    inline bool verbose_mode = false;
+}
+```
+
+意思：
+
+```text
+程序平时默认不输出调试信息
+如果开启 verbose mode，就输出更多信息
+```
+
+---
+
+### 2. 解析 `-v`
+
+`debug.cpp` 里主要有：
+
+```cpp
+void set_verbose_mode (int& argc, char* argv[])
+```
+
+它会做的事情是：
+
+```text
+如果用户命令里写了 -v
+就打开 verbose mode
+并把这个 -v 从 argv 里移掉
+```
+
+这就是为什么老师 main 一开始写：
+
+```cpp
+debug::set_verbose_mode(argc, argv);
+```
+
+### 你怎么理解
+
+比如用户运行：
+
+```bash
+./spo2 -v input.txt report.txt
+```
+
+那 debug 模块会：
+
+```text
+1. 发现 -v
+2. 打开 debug::verbose_mode
+3. 把参数列表整理好
+```
+
+这样 main 后面继续用 `argv[1]`、`argv[2]` 时就不会乱。
+
+---
+
+### 3. 输出调试日志
+
+`debug.h` 里还有：
+
+```cpp
+inline void log (const std::string& text)
+{
+    if (verbose_mode)
+        std::cerr << "[DEBUG] " << text << "\n";
+}
+```
+
+这表示：
+
+```text
+只有 verbose mode 打开时
+debug::log(...) 才真的打印
+```
+
+例如：
+
+```cpp
+debug::log("loading PPG file ...");
+```
+
+作用就是：
+
+```text
+在调试时告诉你程序现在进行到哪一步了
+```
+
+---
+
+### 4. `VAR(x)` 宏
+
+老师还写了：
+
+```cpp
+#define VAR(x) std::cerr << ... << #x << " = " << x << "\n"
+```
+
+你现在可以把它理解成：
+
+```text
+一个快速查看变量值的小工具
+```
+
+例如你写：
+
+```cpp
+VAR(rr);
+```
+
+它会打印出：
+
+```text
+rr = 0.83
+```
+
+而且还会带文件名、函数名、行号。
+
+这非常适合调试。
+
+---
+
+## 9. 你考试时需不需要也写 debug 模块？
+
+### 短答案
+
+```text
+不一定必须
+```
+
+### 更准确地说
+
+如果是考试时间很紧，你完全可以先不单独拆 `debug`，先把题做出来。
+
+但如果题目是 coursework / assignment / take-home / 设计分很重，那：
+
+```text
+debug 模块是加分项
+```
+
+因为它体现了：
+
+- modularity
+- maintainability
+- error tracing
+- professional style
+
+---
+
+## 10. 你以后自己怎么决定要不要拆 debug
+
+### 情况 A：短题 / 考场限时
+
+可以不拆。
+
+直接用：
+
+```cpp
+std::cerr << ...
+```
+
+或者临时打印变量。
+
+---
+
+### 情况 B：大题 / assignment / 想拿设计分
+
+可以拆。
+
+你最小可以写成这样：
+
+#### `debug.h`
 
 ```cpp
 #pragma once
-#include <string>
-#include <vector>
-
-struct PPG {
-    std::vector<double> red;
-    std::vector<double> ir;
-};
-
-struct SignalFeatures {
-    double peak;
-    double valley;
-    double ac;
-    double dc;
-};
-
-PPG load_ppg(const std::string& filename);
-
-std::vector<double> moving_average_filter(const std::vector<double>& data);
-
-PPG filter_ppg(const PPG& ppg);
-
-SignalFeatures extract_features(const std::vector<double>& data);
-
-double compute_ratio_of_ratios(const SignalFeatures& red_features,
-                               const SignalFeatures& ir_features);
-
-double compute_spo2(double rr);
-
-std::string classify_spo2(double spo2);
-
-void write_report(const std::string& output_file,
-                  const std::string& input_file,
-                  const PPG& filtered,
-                  const SignalFeatures& red_features,
-                  const SignalFeatures& ir_features,
-                  double rr,
-                  double spo2,
-                  const std::string& status);
-```
-
----
-
-## 6. 第六步：先搭 main.cpp 骨架
-
-先把 main 串起来：
-
-```cpp
 #include <iostream>
 #include <string>
-#include "ppg.h"
 
-int main(int argc, char* argv[])
-{
-    if (argc < 3)
+namespace debug {
+    inline bool verbose_mode = false;
+
+    inline void log(const std::string& text)
     {
-        std::cerr << "ERROR: expected input and output filenames\n";
-        return 1;
-    }
-
-    std::string input_file = argv[1];
-    std::string output_file = argv[2];
-
-    PPG ppg = load_ppg(input_file);
-
-    PPG filtered = filter_ppg(ppg);
-
-    SignalFeatures red_features = extract_features(filtered.red);
-    SignalFeatures ir_features = extract_features(filtered.ir);
-
-    double rr = compute_ratio_of_ratios(red_features, ir_features);
-    double spo2 = compute_spo2(rr);
-    std::string status = classify_spo2(spo2);
-
-    write_report(output_file, input_file, filtered, red_features, ir_features, rr, spo2, status);
-
-    return 0;
-}
-```
-
-这一步的目标：
-
-```text
-先让 main 看起来像一条完整流程
-```
-
----
-
-## 7. 第七步：现在才开始写 .cpp
-
-这时候才开始真正实现函数。
-
-我建议先写最简单的：
-
-1. `compute_spo2`
-2. `classify_spo2`
-3. `moving_average_filter`
-4. `extract_features`
-5. `load_ppg`
-6. `write_report`
-7. `filter_ppg`
-8. `compute_ratio_of_ratios`
-
-原因：
-
-```text
-先拿最稳、最基础的分
-再写稍微长一点的函数
-```
-
----
-
-## 8. 示例：先写 compute_spo2
-
-题目直接给了公式：
-
-```text
-SpO2 = 110 - 25 * RR
-```
-
-所以先写：
-
-```cpp
-double compute_spo2(double rr)
-{
-    return 110 - 25 * rr;
-}
-```
-
----
-
-## 9. 示例：再写 classify_spo2
-
-题目给了分类规则：
-
-- `>= 95` -> Normal
-- `90 - 95` -> Low
-- `< 90` -> Critical
-
-所以写：
-
-```cpp
-std::string classify_spo2(double spo2)
-{
-    if (spo2 >= 95.0)
-    {
-        return "Normal";
-    }
-    else if (spo2 >= 90.0)
-    {
-        return "Low";
-    }
-    else
-    {
-        return "Critical";
-    }
-}
-```
-
----
-
-## 10. 示例：moving_average_filter
-
-题目要求：
-
-```text
-每个点 = (前一个 + 当前 + 后一个) / 3
-第一和最后一个不算
-```
-
-所以写：
-
-```cpp
-std::vector<double> moving_average_filter(const std::vector<double>& data)
-{
-    std::vector<double> filtered;
-
-    for (int i = 1; i < data.size() - 1; i++)
-    {
-        filtered.push_back((data[i - 1] + data[i] + data[i + 1]) / 3.0);
-    }
-
-    return filtered;
-}
-```
-
----
-
-## 11. 示例：filter_ppg
-
-因为 red 和 ir 都要做同样的滤波，所以再包一层：
-
-```cpp
-PPG filter_ppg(const PPG& ppg)
-{
-    PPG filtered;
-    filtered.red = moving_average_filter(ppg.red);
-    filtered.ir = moving_average_filter(ppg.ir);
-    return filtered;
-}
-```
-
----
-
-## 12. 示例：extract_features
-
-题目说：
-
-- peak = max
-- valley = min
-- AC = peak - valley
-- DC = valley
-
-所以写：
-
-```cpp
-SignalFeatures extract_features(const std::vector<double>& data)
-{
-    SignalFeatures f;
-
-    f.peak = data[0];
-    f.valley = data[0];
-
-    for (int i = 1; i < data.size(); i++)
-    {
-        if (data[i] > f.peak)
+        if (verbose_mode)
         {
-            f.peak = data[i];
-        }
-
-        if (data[i] < f.valley)
-        {
-            f.valley = data[i];
+            std::cerr << "[DEBUG] " << text << "\n";
         }
     }
-
-    f.ac = f.peak - f.valley;
-    f.dc = f.valley;
-
-    return f;
 }
 ```
 
----
-
-## 13. 示例：compute_ratio_of_ratios
-
-题目公式：
-
-```text
-RR = (AC_red / DC_red) / (AC_IR / DC_IR)
-```
-
-所以写：
+#### `debug.cpp`
 
 ```cpp
-double compute_ratio_of_ratios(const SignalFeatures& red_features,
-                               const SignalFeatures& ir_features)
-{
-    return (red_features.ac / red_features.dc) /
-           (ir_features.ac / ir_features.dc);
-}
+#include "debug.h"
 ```
 
----
-
-## 14. 示例：load_ppg
-
-题目文件格式：
-
-```text
-RED IR
-1025.3 1550.8
-1030.1 1548.2
-...
-```
-
-所以写：
+然后在 main 里：
 
 ```cpp
-PPG load_ppg(const std::string& filename)
-{
-    std::ifstream infile(filename);
+debug::verbose_mode = true;
+debug::log("starting program");
+```
 
-    if (!infile)
-    {
-        throw std::runtime_error("failed to open file");
-    }
+这已经够你在自己的作业里用了。
 
-    std::string red_label, ir_label;
-    infile >> red_label >> ir_label;
+---
 
-    if (red_label != "RED" || ir_label != "IR")
-    {
-        throw std::runtime_error("invalid file format");
-    }
+## 11. 所以老师这份 SpO2 答案，为什么要拆成这些模块
 
-    PPG ppg;
-    double red_value, ir_value;
+你可以这样理解：
 
-    while (infile >> red_value >> ir_value)
-    {
-        ppg.red.push_back(red_value);
-        ppg.ir.push_back(ir_value);
-    }
+### `spo2.cpp`
 
-    return ppg;
-}
+```text
+主流程控制
+```
+
+### `ppg.*`
+
+```text
+负责原始数据读取
+```
+
+### `utils.*`
+
+```text
+负责通用的小工具函数
+```
+
+### `report.*`
+
+```text
+负责最后报告输出
+```
+
+### `debug.*`
+
+```text
+负责调试和 verbose 日志
+```
+
+这其实就是在做：
+
+```text
+一个模块只负责一种工作
+```
+
+这就是老师很喜欢的“结构清楚”。
+
+---
+
+## 12. 你以后可以怎么模仿这个思路
+
+如果以后再遇到综合题，你可以先想：
+
+```text
+哪些部分是：
+1. 主流程
+2. 原始数据读入
+3. 通用工具
+4. 报告输出
+5. 调试支持
+```
+
+然后按这个思路拆。
+
+不一定每题都要全拆出来，但这个思路你要有。
+
+---
+
+## 13. 最后给你一个超短版
+
+```text
+spo2.cpp   = main，串流程
+ppg.*      = 读 PPG 数据
+utils.*    = 通用小函数
+report.*   = 写报告
+debug.*    = 调试输出、verbose 模式
 ```
 
 ---
 
-## 15. 示例：write_report
-
-题目要求输出：
-
-- 输入文件名
-- filtered sample 数量
-- red/ir 的 peak, valley, AC, DC
-- RR
-- SpO2
-- status
-
-所以写：
-
-```cpp
-void write_report(const std::string& output_file,
-                  const std::string& input_file,
-                  const PPG& filtered,
-                  const SignalFeatures& red_features,
-                  const SignalFeatures& ir_features,
-                  double rr,
-                  double spo2,
-                  const std::string& status)
-{
-    std::ofstream outfile(output_file);
-
-    if (!outfile)
-    {
-        throw std::runtime_error("failed to open output file");
-    }
-
-    outfile << "PPG file: " << input_file << "\n";
-    outfile << "Samples available after filtering: " << filtered.red.size() << "\n";
-
-    outfile << "Red signal: Peak = " << red_features.peak
-            << " Valley = " << red_features.valley
-            << " AC = " << red_features.ac
-            << " DC = " << red_features.dc << "\n";
-
-    outfile << "IR signal: Peak = " << ir_features.peak
-            << " Valley = " << ir_features.valley
-            << " AC = " << ir_features.ac
-            << " DC = " << ir_features.dc << "\n";
-
-    outfile << "Ratio of Ratios (RR): " << rr << "\n";
-    outfile << "Estimated SpO2: " << spo2 << "%\n";
-    outfile << "Status: " << status << "\n";
-}
-```
-
----
-
-## 16. 这道题你真正要学会的顺序
+## 14. 最重要的一句话
 
 ```text
-题目
--> 先写中文步骤
--> 先想 main 想长什么样
--> 根据 main 反推 struct 和函数声明
--> 最后一个函数一个函数补
+老师把题拆成很多模块，不是为了复杂化，
+而是为了让每个文件只做一件事。
 ```
 
----
-
-## 17. 三部分关系
-
-### ppg.h
-
-负责：
-
-```text
-struct PPG
-struct SignalFeatures
-所有函数声明
-```
-
-### ppg.cpp
-
-负责：
-
-```text
-把每个函数真正写出来
-```
-
-### main.cpp
-
-负责：
-
-```text
-参数检查
-调用函数
-串流程
-```
-
----
-
-## 18. 最重要的一句话
-
-```text
-先决定 main 想要什么
-然后让 .h 和 .cpp 去服务 main
-```
