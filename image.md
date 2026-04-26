@@ -1,609 +1,553 @@
-# Assessment 2：Image Metrics 题怎么按做题思路一步一步搭结构
+# Assessment 2：按照老师标准答案的模块思路来理解
 
-这份笔记不是直接给最终答案，而是训练：
+这份笔记解决的问题是：
 
 ```text
-看到题目
--> 先想最后 main 想长什么样
--> 再反推 .h
--> 最后补 .cpp
+为什么老师的标准答案会拆成：
+debug
+image
+image_utils
+image_stats
+report
+main
 ```
 
-题目来源：
+也就是：
+
+```text
+不只是“把题做出来”
+还要“把题拆得清楚、好维护、好调试”
+```
+
+参考：
 
 - [Assignment 2 README](https://github.com/jdtournier/cpp_assignment2_image_metrics/blob/main/README.md)
+- [Assignment 2 solution 目录](https://github.com/jdtournier/cpp_assignment2_image_metrics/tree/solution/solution)
 
 ---
 
-## 1. 第一步：先把题目翻译成中文步骤
+## 1. 老师这份答案一共分成了什么
 
-看到题目，我先写：
+老师标准答案里主要有这些文件：
 
 ```text
-输入：
-- input image file
-- output report file
+debug.cpp
+debug.h
 
-输出：
-- report file
-- segmented image file
-- binary mask file
+image.h
 
-步骤：
-1. 读图像文件
-2. 计算 histogram
-3. 找 histogram 的两个主峰
-4. 找两个峰之间的 valley，得到 threshold
-5. 用 threshold 生成 binary mask
-6. 用 mask 和原图做 segmented image
-7. 计算 metrics：
-   - total cell area
-   - mean intensity
-   - variance
-8. 写 report
-9. 另存 mask 和 segmented image
+image_metrics.cpp
+
+image_stats.cpp
+image_stats.h
+
+image_utils.cpp
+image_utils.h
+
+report.cpp
+report.h
 ```
 
-这一步的目的：
+你可以把它理解成：
 
 ```text
-先把题目从一大段英文，变成一条处理流水线
+debug         -> 调试和 verbose 模式
+image         -> 图像这个核心数据类型本身
+image_utils   -> 图像处理工具函数
+image_stats   -> 统计指标
+report        -> 输出报告
+image_metrics.cpp -> main，负责串流程
 ```
 
 ---
 
-## 2. 第二步：先想数据要怎么存
+## 2. 每个模块到底负责什么
 
-一张图像至少有：
+---
 
-- width
-- height
-- pixel values
+## 3. `image_metrics.cpp`：主程序入口
 
-所以第一反应应该是：
+这个文件就是：
 
 ```text
-这不是一个单独数字，要打包起来
+main.cpp 的角色
 ```
 
-所以想到：
-
-```cpp
-struct Image {
-    int width;
-    int height;
-    std::vector<int> pixels;
-};
-```
-
----
-
-## 3. 第三步：再想最后的指标要怎么存
-
-题目最后要得到：
-
-- threshold
-- total cell area
-- mean intensity
-- variance
-
-所以可以再定义一个：
-
-```cpp
-struct ImageMetrics {
-    int threshold;
-    int area;
-    double mean_intensity;
-    double variance;
-};
-```
-
-这样后面写 report 会清楚很多。
-
----
-
-## 4. 第四步：先想我希望 main 长什么样
-
-我不先写细节，我先想 main 最后想长成：
-
-```cpp
-Image image = load_image(input_file);
-
-std::vector<int> histogram = compute_histogram(image);
-int threshold = compute_threshold(histogram);
-
-Image mask = make_binary_mask(image, threshold);
-Image segmented = segment_image(image, mask);
-
-ImageMetrics metrics = compute_metrics(mask, segmented, threshold);
-
-write_report(output_file, metrics);
-save_image(make_mask_filename(input_file), mask);
-save_image(make_segmented_filename(input_file), segmented);
-```
-
-这一步的意义：
+它负责：
 
 ```text
-先决定我要“得到什么”
+1. 检查命令行参数
+2. 设置 debug 模式
+3. 读取图像
+4. 计算 histogram
+5. 找 peaks
+6. 找 threshold
+7. 生成 mask
+8. 做 segmented image
+9. 算面积 / 平均值 / 方差
+10. 写 report
 ```
 
----
-
-## 5. 第五步：根据 main 反推 .h
-
-现在我不急着写函数内容。
-
-我先把 `image_metrics.h` 里的内容列出来：
-
-```cpp
-#pragma once
-#include <string>
-#include <vector>
-
-struct Image {
-    int width;
-    int height;
-    std::vector<int> pixels;
-};
-
-struct ImageMetrics {
-    int threshold;
-    int area;
-    double mean_intensity;
-    double variance;
-};
-
-Image load_image(const std::string& filename);
-
-std::vector<int> compute_histogram(const Image& image);
-
-int compute_threshold(const std::vector<int>& histogram);
-
-Image make_binary_mask(const Image& image, int threshold);
-
-Image segment_image(const Image& image, const Image& mask);
-
-ImageMetrics compute_metrics(const Image& mask,
-                             const Image& segmented,
-                             int threshold);
-
-void write_report(const std::string& output_file,
-                  const ImageMetrics& metrics);
-
-void save_image(const std::string& filename, const Image& image);
-
-std::string make_mask_filename(const std::string& input_file);
-
-std::string make_segmented_filename(const std::string& input_file);
-```
-
----
-
-## 6. 第六步：先搭 main.cpp 骨架
-
-先把 main 串起来：
-
-```cpp
-#include <iostream>
-#include <string>
-#include "image_metrics.h"
-
-int main(int argc, char* argv[])
-{
-    if (argc < 3)
-    {
-        std::cerr << "ERROR: expected input image and output report filenames\n";
-        return 1;
-    }
-
-    std::string input_file = argv[1];
-    std::string output_file = argv[2];
-
-    Image image = load_image(input_file);
-
-    std::vector<int> histogram = compute_histogram(image);
-    int threshold = compute_threshold(histogram);
-
-    Image mask = make_binary_mask(image, threshold);
-    Image segmented = segment_image(image, mask);
-
-    ImageMetrics metrics = compute_metrics(mask, segmented, threshold);
-
-    write_report(output_file, metrics);
-    save_image(make_mask_filename(input_file), mask);
-    save_image(make_segmented_filename(input_file), segmented);
-
-    return 0;
-}
-```
-
-这一步的目标：
+所以你要把它理解成：
 
 ```text
-先让 main 看起来像一条完整流程
+主控文件
 ```
 
----
-
-## 7. 第七步：现在才开始写 .cpp
-
-这时候才开始真正实现函数。
-
-我建议先写最简单的：
-
-1. `make_mask_filename`
-2. `make_segmented_filename`
-3. `compute_histogram`
-4. `make_binary_mask`
-5. `segment_image`
-6. `compute_metrics`
-7. `write_report`
-8. `load_image`
-9. `save_image`
-10. `compute_threshold`
-
-原因：
+它不负责写所有细节算法，而是：
 
 ```text
-先拿最稳、最基础的分
-最后再写最绕的 threshold 逻辑
+把整个程序流程串起来
 ```
 
 ---
 
-## 8. 示例：先写文件名辅助函数
+## 4. `image.h`：核心数据类型模块
 
-题目要求：
-
-- `filename_mask.txt`
-- `filename_seg.txt`
-
-所以我先写最简单的函数：
-
-```cpp
-std::string make_mask_filename(const std::string& input_file)
-{
-    return input_file + "_mask.txt";
-}
-
-std::string make_segmented_filename(const std::string& input_file)
-{
-    return input_file + "_seg.txt";
-}
-```
-
-如果后面要去掉 `.txt` 再拼，也可以改，但先把主流程跑通最重要。
-
----
-
-## 9. 示例：compute_histogram
-
-题目说：
+这个模块负责：
 
 ```text
-灰度值范围 0 到 255
-h(i) = 强度 i 出现的次数
+Image 是什么
+怎么存 width / height / pixels
+怎么读图像文件
+怎么让 Image 支持一些自然操作
 ```
 
-所以我会想到：
+### 它为什么只有 `image.h`，没有 `image.cpp`
 
-```cpp
-std::vector<int> histogram(256, 0);
+因为老师这里把 `Image` 做成了：
+
+```text
+template class
 ```
 
-然后扫描所有像素：
+你前面学过：
 
-```cpp
-std::vector<int> compute_histogram(const Image& image)
-{
-    std::vector<int> histogram(256, 0);
-
-    for (const auto& pixel : image.pixels)
-    {
-        histogram[pixel]++;
-    }
-
-    return histogram;
-}
+```text
+template class / template function
+通常完整定义都放在 .h 里
 ```
+
+所以这里没有 `image.cpp` 是正常的。
 
 ---
 
-## 10. 示例：make_binary_mask
+## 5. `image.h` 里做了哪几件大事
 
-题目给了公式：
+### 1. 定义图像类模板
 
-```text
-M(i,j) = 0 if I(i,j) <= T
-M(i,j) = 1 if I(i,j) > T
-```
-
-所以我会写：
+大意是：
 
 ```cpp
-Image make_binary_mask(const Image& image, int threshold)
-{
-    Image mask;
-    mask.width = image.width;
-    mask.height = image.height;
-
-    for (const auto& pixel : image.pixels)
-    {
-        if (pixel > threshold)
-        {
-            mask.pixels.push_back(1);
-        }
-        else
-        {
-            mask.pixels.push_back(0);
-        }
-    }
-
-    return mask;
-}
+template <typename T>
+class Image { ... };
 ```
+
+意思：
+
+```text
+Image 这个类可以存不同类型的像素
+```
+
+比如：
+
+- 灰度图像可以用 `Image<double>`
+- mask 可以用 `Image<unsigned char>`
+
+这就是 6B 的 template class 真正在题里落地。
 
 ---
 
-## 11. 示例：segment_image
+### 2. 把“读图像文件”放进 constructor
 
-题目说：
+老师这里用了：
+
+```cpp
+Image(const std::string& filename);
+```
+
+这表示：
 
 ```text
-S(i,j) = I(i,j) * M(i,j)
+创建一个 Image 对象的时候
+就直接从文件读进来
+```
+
+所以 main 里才可以直接写：
+
+```cpp
+Image image(argv[1]);
+```
+
+这个设计很漂亮，因为它让 main 很短。
+
+---
+
+### 3. 重载了 `operator()`
+
+老师不是写：
+
+```cpp
+image.data[i][j]
+```
+
+而是写：
+
+```cpp
+image(i, j)
+```
+
+也就是在 `image.h` 里重载了：
+
+```cpp
+T& operator()(int i, int j)
+```
+
+意思：
+
+```text
+让 Image 对象像二维矩阵一样访问
+```
+
+这就是 5B 的 operator overloading 真正在题里落地。
+
+---
+
+### 4. 重载了 `operator>`
+
+老师写了一个运算符，让你可以直接这样：
+
+```cpp
+auto mask = image > threshold;
+```
+
+这很重要。
+
+它表示：
+
+```text
+给一张图像和一个 threshold
+直接生成 binary mask
+```
+
+所以不是 main 里手写大循环，而是：
+
+```text
+把“生成 mask”包装成一个运算
+```
+
+这也是 5A/5B 真的用起来的样子。
+
+---
+
+### 5. 重载了 `operator*`
+
+老师 main 里写：
+
+```cpp
+auto masked_image = image * mask;
+```
+
+这表示：
+
+```text
+用 operator* 直接表达“逐像素相乘”
 ```
 
 所以：
 
-```cpp
-Image segment_image(const Image& image, const Image& mask)
-{
-    Image segmented;
-    segmented.width = image.width;
-    segmented.height = image.height;
-
-    for (int i = 0; i < image.pixels.size(); i++)
-    {
-        segmented.pixels.push_back(image.pixels[i] * mask.pixels[i]);
-    }
-
-    return segmented;
-}
+```text
+原图 × mask = segmented image
 ```
 
----
+而不是 main 里再写一个双重循环。
 
-## 12. 示例：compute_metrics
-
-题目要算：
-
-- area = mask 里 1 的个数
-- mean intensity
-- variance
-
-所以我会先分三步：
-
-```cpp
-ImageMetrics compute_metrics(const Image& mask,
-                             const Image& segmented,
-                             int threshold)
-{
-    ImageMetrics metrics;
-    metrics.threshold = threshold;
-
-    int area = 0;
-    double sum = 0.0;
-
-    for (int i = 0; i < mask.pixels.size(); i++)
-    {
-        if (mask.pixels[i] == 1)
-        {
-            area++;
-            sum += segmented.pixels[i];
-        }
-    }
-
-    metrics.area = area;
-    metrics.mean_intensity = sum / area;
-
-    double variance_sum = 0.0;
-
-    for (int i = 0; i < mask.pixels.size(); i++)
-    {
-        if (mask.pixels[i] == 1)
-        {
-            double diff = segmented.pixels[i] - metrics.mean_intensity;
-            variance_sum += diff * diff;
-        }
-    }
-
-    metrics.variance = variance_sum / area;
-
-    return metrics;
-}
-```
-
----
-
-## 13. 示例：write_report
-
-题目要求 report 至少包含：
-
-- threshold
-- total cell area
-- mean intensity
-- variance
-
-所以写：
-
-```cpp
-void write_report(const std::string& output_file,
-                  const ImageMetrics& metrics)
-{
-    std::ofstream outfile(output_file);
-
-    if (!outfile)
-    {
-        throw std::runtime_error("failed to open output file");
-    }
-
-    outfile << "Optimal Threshold Calculated: " << metrics.threshold << "\n";
-    outfile << "Total Cell Area: " << metrics.area << " pixels\n";
-    outfile << "Mean Intensity: " << metrics.mean_intensity << "\n";
-    outfile << "Variance: " << metrics.variance << "\n";
-}
-```
-
----
-
-## 14. 示例：load_image
-
-题目格式：
+这就是：
 
 ```text
-100 150
-100 101 109 102 ...
-101 101 102 111 ...
-...
+把题目公式直接翻译成代码形式
 ```
 
-所以我会写：
+非常漂亮。
 
-```cpp
-Image load_image(const std::string& filename)
-{
-    std::ifstream infile(filename);
+---
 
-    if (!infile)
-    {
-        throw std::runtime_error("failed to open input image");
-    }
+## 6. `image_utils.h / image_utils.cpp`：图像处理工具模块
 
-    Image image;
-    infile >> image.width >> image.height;
+这个模块负责：
 
-    int pixel;
-    while (infile >> pixel)
-    {
-        image.pixels.push_back(pixel);
-    }
+```text
+处理图像本身的工具函数
+```
 
-    return image;
-}
+老师这里面主要有：
+
+### 1. `compute_histogram()`
+
+作用：
+
+```text
+给一张图像，统计每个灰度值出现多少次
+```
+
+为什么放在 `image_utils`？
+
+因为它不是 report，不是 stats，不是 main，它是图像处理本身的工具。
+
+---
+
+### 2. `find_peaks()`
+
+作用：
+
+```text
+在 histogram 里找到峰值位置
 ```
 
 ---
 
-## 15. 示例：save_image
+### 3. `sort_peaks()`
 
-题目要求 mask 和 segmented image 都按和输入一样的格式保存。
+作用：
+
+```text
+把找到的 peaks 按对应频数从大到小排序
+```
+
+---
+
+### 4. `find_valley()`
+
+作用：
+
+```text
+在两个 peaks 之间找最小值位置
+```
+
+所以你可以把 `image_utils` 理解成：
+
+```text
+专门负责 threshold 前后那些图像处理步骤
+```
+
+---
+
+## 7. `image_stats.h / image_stats.cpp`：统计指标模块
+
+这个模块负责：
+
+```text
+算最后题目要求的指标
+```
+
+老师这里面主要有：
+
+### 1. `pixel_count()`
+
+作用：
+
+```text
+数 mask 里有多少个前景像素
+```
+
+这对应题目里的：
+
+```text
+Total Cell Area
+```
+
+---
+
+### 2. `image_mean()`
+
+作用：
+
+```text
+只在 mask==1 的位置上，算平均亮度
+```
+
+---
+
+### 3. `image_variance()`
+
+作用：
+
+```text
+只在 mask==1 的位置上，算方差
+```
 
 所以：
 
+```text
+image_stats = 专门负责最终数值指标
+```
+
+---
+
+## 8. `report.h / report.cpp`：输出报告模块
+
+这个模块负责：
+
+```text
+把最终结果写进 report file
+```
+
+老师这里 report 模块主要只做：
+
+```text
+1. 打开输出文件
+2. 按题目格式写 threshold / area / mean / variance
+```
+
+为什么要单独拆出来？
+
+因为：
+
+```text
+“写输出报告”是一个独立任务
+```
+
+不应该塞进 main。
+
+---
+
+## 9. `debug.h / debug.cpp`：调试模块
+
+和 SpO2 一样，这里也有专门的 `debug` 模块。
+
+它的作用还是：
+
+```text
+1. 支持 -v verbose 模式
+2. 输出调试日志
+3. 在开发时帮助观察中间结果
+```
+
+---
+
+## 10. Assessment 2 里的 debug 为什么更有用
+
+因为这题是图像题，不只是数字。
+
+老师在 debug 模式下会做一些事情，比如：
+
+```text
+显示原图
+显示 histogram
+显示 mask
+显示 segmented image
+```
+
+所以这里的 debug 模块不只是打印一句文字，而是：
+
+```text
+帮助你“看见”算法每一步做了什么
+```
+
+这对图像题特别有帮助。
+
+---
+
+## 11. 这题为什么拆得比 SpO2 更“高级”
+
+因为它真的把你前面学过的高级内容都用上了：
+
+### 4A / 4B
+
+```text
+class / struct
+```
+
+### 5A / 5B
+
+```text
+operator()
+operator>
+operator*
+```
+
+### 6A / 6B
+
+```text
+template function
+template class
+```
+
+所以这题不是只考你“会不会 for 循环”，而是：
+
+```text
+你能不能把高级语法用在合理的位置
+```
+
+---
+
+## 12. 这题 main 为什么这么短
+
+老师 main 大概是这种感觉：
+
 ```cpp
-void save_image(const std::string& filename, const Image& image)
-{
-    std::ofstream outfile(filename);
+Image image(argv[1]);
+auto histogram = compute_histogram(image);
+auto peaks = find_peaks(histogram, 10);
+sort_peaks(peaks, histogram);
+auto threshold = find_valley(histogram, peaks[0], peaks[1]);
+auto mask = image > threshold;
+auto masked_image = image * mask;
+auto cell_area = pixel_count(mask);
+auto mean_value = image_mean(image, mask);
+auto variance = image_variance(image, mask);
+write_report(argv[2], threshold, cell_area, mean_value, variance);
+```
 
-    if (!outfile)
-    {
-        throw std::runtime_error("failed to open image output file");
-    }
+这说明什么？
 
-    outfile << image.width << " " << image.height << "\n";
+说明老师做到了：
 
-    for (int i = 0; i < image.pixels.size(); i++)
-    {
-        outfile << image.pixels[i];
+```text
+main 只讲故事
+细节都被藏到模块里了
+```
 
-        if ((i + 1) % image.width == 0)
-        {
-            outfile << "\n";
-        }
-        else
-        {
-            outfile << " ";
-        }
-    }
-}
+这就是你以后写大题很值得模仿的地方。
+
+---
+
+## 13. 你以后可以怎么模仿这个思路
+
+如果以后再遇到综合题，你可以先想：
+
+```text
+哪些部分是：
+1. 主流程
+2. 核心数据类型
+3. 图像/信号处理工具
+4. 统计指标
+5. 报告输出
+6. 调试支持
+```
+
+然后按这个思路拆。
+
+---
+
+## 14. 最后给你一个超短版
+
+```text
+image_metrics.cpp = main，串流程
+image.h           = Image 类模板 + operator overloading
+image_utils.*     = histogram / peaks / valley / threshold
+image_stats.*     = area / mean / variance
+report.*          = 写 report
+debug.*           = 调试输出、verbose 模式
 ```
 
 ---
 
-## 16. 最后再写 compute_threshold
-
-这一步最绕，所以我会留到后面。
-
-题目要求：
-
-1. 找 histogram 里两个主峰
-2. 峰的定义：比前后 10 个邻居都高
-3. 找两个峰之间最低点作为 threshold
-
-所以这一步我会拆成三层思考：
+## 15. 最重要的一句话
 
 ```text
-先找所有局部峰
--> 再选最高的两个
--> 再在它们中间找最小值位置
-```
-
-这一步你先不需要马上会写完整代码，但你要知道：
-
-```text
-它本质还是 vector + for + if
-```
-
----
-
-## 17. 这道题你真正要学会的顺序
-
-```text
-题目
--> 先写中文步骤
--> 先想 main 想长什么样
--> 根据 main 反推 struct 和函数声明
--> 最后一个函数一个函数补
-```
-
----
-
-## 18. 三部分关系
-
-### image_metrics.h
-
-负责：
-
-```text
-struct Image
-struct ImageMetrics
-所有函数声明
-```
-
-### image_metrics.cpp
-
-负责：
-
-```text
-把每个函数真正写出来
-```
-
-### main.cpp
-
-负责：
-
-```text
-参数检查
-调用函数
-串流程
-```
-
----
-
-## 19. 最重要的一句话
-
-```text
-先决定 main 想要什么
-然后让 .h 和 .cpp 去服务 main
+老师把 assessment 2 拆成很多模块，
+不是为了复杂化，
+而是为了让每个模块只做一件事，
+同时把 class、template、operator overloading 真正用起来。
 ```
